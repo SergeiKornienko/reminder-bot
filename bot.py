@@ -162,11 +162,17 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Точка входа ---
 if __name__ == '__main__':
+    import asyncio
+
     # Flask в отдельном потоке
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # Бот в главном потоке
+    # Создаём новый event loop для Python 3.14+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Бот
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("list", list_reminders))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
