@@ -179,5 +179,5 @@ if __name__ == '__main__':
     job_queue = app.job_queue
     job_queue.run_repeating(check_reminders, interval=60, first=10)
 
-    print("Бот + Flask на Render. Погнали!")
+    print("Бот + Flask на Render. Погнали!", file=sys.stderr)
     app.run_polling(stop_signals=[])
