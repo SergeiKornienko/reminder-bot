@@ -1,5 +1,6 @@
 import re
 import os
+import sys
 import threading
 from datetime import datetime, timedelta
 import sqlite3
@@ -7,6 +8,15 @@ import dateparser
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
+# --- Проверка токена ---
+TOKEN = os.environ.get("BOT_TOKEN")
+if not TOKEN:
+    print("❌ ОШИБКА: Переменная BOT_TOKEN не найдена!")
+    print("Доступные переменные:", list(os.environ.keys()))
+    sys.exit(1)
+
+print(f"✅ Токен загружен (длина: {len(TOKEN)})")
 
 # --- Flask (в отдельном потоке) ---
 web_app = Flask(__name__)
@@ -152,8 +162,6 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Точка входа ---
 if __name__ == '__main__':
-    TOKEN = os.environ.get("BOT_TOKEN")
-
     # Flask в отдельном потоке
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
