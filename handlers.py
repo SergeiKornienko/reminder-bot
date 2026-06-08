@@ -1,9 +1,13 @@
 import logging
+import pytz
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from parser import parse_reminder
 from database import add_reminder, get_due_reminders, delete_reminder, get_reminders_by_chat
+
+TZ = pytz.timezone("Europe/Moscow")
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +70,12 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "📋 Твои напоминалки:\n\n"
     for text, dt in reminders:
         if isinstance(dt, str):
+            # Supabase возвращает ISO-формат: "2026-06-09T10:00:00+00:00"
             dt = dt.replace("T", " ").split("+")[0].split(".")[0]
             dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
+            # Приводим к UTC, затем конвертируем в Москву
+            from datetime import timezone
+            dt = dt.replace(tzinfo=timezone.utc).astimezone(TZ)
         formatted = dt.strftime("%d.%m в %H:%M")
         msg += f"• {formatted} — {text}\n"
     await update.message.reply_text(msg)
