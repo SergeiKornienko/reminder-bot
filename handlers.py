@@ -67,8 +67,8 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "📋 Твои напоминалки:\n\n"
     for text, dt in reminders:
         if isinstance(dt, str):
-            if '.' in dt:
-                dt = dt.split('.')[0]
+            # Supabase возвращает ISO-формат: "2026-06-09T10:00:00+00:00"
+            dt = dt.replace("T", " ").split("+")[0].split(".")[0]
             dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
         formatted = dt.strftime("%d.%m в %H:%M")
         msg += f"• {formatted} — {text}\n"
