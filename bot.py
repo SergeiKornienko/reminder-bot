@@ -2,23 +2,27 @@ import re
 import os
 import sys
 import threading
-from datetime import datetime, timedelta
+import asyncio
+from datetime import datetime
 import sqlite3
-import dateparser
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# --- Проверка токена ---
+# --- Импорт парсера ---
+from parser import parse_reminder
+
+# --- Конфигурация ---
 TOKEN = os.environ.get("BOT_TOKEN")
-if not TOKEN:
-    print("❌ ОШИБКА: Переменная BOT_TOKEN не найдена!")
-    print("Доступные переменные:", list(os.environ.keys()))
-    sys.exit(1)
 
-print(f"✅ Токен загружен (длина: {len(TOKEN)})")
+def check_token():
+    """Проверяет токен. Вызывается только при запуске, не при импорте."""
+    if not TOKEN:
+        print("❌ ОШИБКА: Переменная BOT_TOKEN не найдена!", file=sys.stderr)
+        sys.exit(1)
+    print(f"✅ Токен загружен (длина: {len(TOKEN)})", file=sys.stderr)
 
-# --- Flask (в отдельном потоке) ---
+# --- Flask ---
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -26,7 +30,7 @@ def home():
     return "Bot is alive"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 7860))
+    port = int(os.environ.get("PORT", 10000))
     web_app.run(host='0.0.0.0', port=port)
 
 # --- База данных ---
@@ -39,10 +43,12 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS reminders
                    remind_time TIMESTAMP NOT NULL)''')
 conn.commit()
 
-# --- Обработчик сообщений ---
+# --- Обработчики Telegram ---
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     chat_id = update.message.chat_id
+
     if not user_text.lower().startswith("напомни"):
         await update.message.reply_text(
             "Я понимаю только:\n"
@@ -51,61 +57,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "«Напомни через 2 часа проверить почту»"
         )
         return
+
     payload = user_text[7:].strip()
-    remind_dt = None
-    remind_text = payload
-
-    day_match = re.match(
-        r'(сегодня|завтра|послезавтра)\s+в\s+(\d{1,2}):(\d{2})\s*(.*)',
-        payload, re.IGNORECASE
-    )
-    if day_match:
-        day_word = day_match.group(1).lower()
-        hour = int(day_match.group(2))
-        minute = int(day_match.group(3))
-        remind_text = day_match.group(4).strip() or payload
-        now = datetime.now().replace(second=0, microsecond=0)
-        if day_word == "сегодня":
-            remind_dt = now.replace(hour=hour, minute=minute)
-        elif day_word == "завтра":
-            remind_dt = now.replace(hour=hour, minute=minute) + timedelta(days=1)
-        elif day_word == "послезавтра":
-            remind_dt = now.replace(hour=hour, minute=minute) + timedelta(days=2)
-
-    if remind_dt is None:
-        date_match = re.match(
-            r'(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s+в\s+(\d{1,2}):(\d{2})\s*(.*)',
-            payload
-        )
-        if date_match:
-            day = int(date_match.group(1))
-            month = int(date_match.group(2))
-            year = int(date_match.group(3)) if date_match.group(3) else datetime.now().year
-            hour = int(date_match.group(4))
-            minute = int(date_match.group(5))
-            remind_text = date_match.group(6).strip() or payload
-            try:
-                remind_dt = datetime(year, month, day, hour, minute)
-            except ValueError:
-                pass
-
-    if remind_dt is None:
-        relative_match = re.match(
-            r'через\s+(\d+)\s+(час|часа|часов|минут|минуту|минуты)\s*(.*)',
-            payload, re.IGNORECASE
-        )
-        if relative_match:
-            amount = int(relative_match.group(1))
-            unit = relative_match.group(2).lower()
-            remind_text = relative_match.group(3).strip() or payload
-            now = datetime.now()
-            if "час" in unit:
-                remind_dt = now + timedelta(hours=amount)
-            elif "минут" in unit:
-                remind_dt = now + timedelta(minutes=amount)
-
-    if remind_dt is None:
-        remind_dt = dateparser.parse(payload, languages=['ru'])
+    remind_dt, remind_text = parse_reminder(payload)
 
     if remind_dt is None:
         await update.message.reply_text(
@@ -136,7 +90,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 text=f"⏰ НАПОМИНАНИЕ!\n«{text}»"
             )
         except Exception as e:
-            print(f"Ошибка отправки: {e}")
+            print(f"Ошибка отправки: {e}", file=sys.stderr)
         cursor.execute("DELETE FROM reminders WHERE id = ?", (rem_id,))
         conn.commit()
 
@@ -162,13 +116,13 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Точка входа ---
 if __name__ == '__main__':
-    import asyncio
+    check_token()
 
     # Flask в отдельном потоке
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # Создаём новый event loop для Python 3.14+
+    # Event loop для Python 3.14+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -179,5 +133,5 @@ if __name__ == '__main__':
     job_queue = app.job_queue
     job_queue.run_repeating(check_reminders, interval=60, first=10)
 
-    print("Бот + Flask на Render. Погнали!", file=sys.stderr)
+    print("Бот + Flask на Render. Погнали!", file=sys.stderr, flush=True)
     app.run_polling(stop_signals=[])
