@@ -1,21 +1,36 @@
 import os
 import sys
-import threading
 import time
+import threading
 import asyncio
+import logging
+
 from flask import Flask
+from waitress import serve
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-import database
+
 from handlers import handle_message, check_reminders, list_reminders
+
+# --- Логирование ---
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.INFO,
+    stream=sys.stderr,
+)
+logger = logging.getLogger(__name__)
+
+# Отключаем дебаг-логи от httpx и telegram
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
 
 # --- Конфигурация ---
 TOKEN = os.environ.get("BOT_TOKEN")
 
 def check_token():
     if not TOKEN:
-        print("❌ ОШИБКА: Переменная BOT_TOKEN не найдена!", file=sys.stderr)
+        logger.error("Переменная BOT_TOKEN не найдена!")
         sys.exit(1)
-    print(f"✅ Токен загружен (длина: {len(TOKEN)})", file=sys.stderr)
+    logger.info("Токен загружен (длина: %d)", len(TOKEN))
 
 # --- Flask ---
 web_app = Flask(__name__)
@@ -26,13 +41,14 @@ def home():
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    web_app.run(host='0.0.0.0', port=port)
+    logger.info("Запуск WSGI-сервера на порту %d", port)
+    serve(web_app, host='0.0.0.0', port=port, _quiet=True)
 
 # --- Точка входа ---
 if __name__ == '__main__':
     check_token()
 
-    # Flask в отдельном потоке
+    # Flask/Waitress в отдельном потоке
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
@@ -42,14 +58,16 @@ if __name__ == '__main__':
 
     # Бот
     app = Application.builder().token(TOKEN).build()
-    app.bot_data["db_client"] = None  # Совместимость с handlers
+    app.bot_data["db_client"] = None
 
     app.add_handler(CommandHandler("list", list_reminders))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     job_queue = app.job_queue
     job_queue.run_repeating(check_reminders, interval=60, first=10)
 
-    print("Бот + Flask + Supabase на Render. Погнали!", file=sys.stderr, flush=True)
-    
+    logger.info("Бот + Waitress + Supabase на Render. Погнали!")
+
+    # Ждём, чтобы старый процесс Telegram точно отключился
     time.sleep(15)
+
     app.run_polling(stop_signals=[])

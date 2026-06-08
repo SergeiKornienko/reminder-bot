@@ -1,13 +1,14 @@
-import sys
+import logging
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from parser import parse_reminder
 from database import add_reminder, get_due_reminders, delete_reminder, get_reminders_by_chat
 
+logger = logging.getLogger(__name__)
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает входящие сообщения."""
     user_text = update.message.text
     chat_id = update.message.chat_id
 
@@ -40,7 +41,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
-    """Фоновая проверка: отправляет просроченные напоминалки."""
     client = context.bot_data.get("db_client")
     due_reminders = get_due_reminders(client)
     for rem_id, chat_id, text in due_reminders:
@@ -50,12 +50,11 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 text=f"⏰ НАПОМИНАНИЕ!\n«{text}»"
             )
         except Exception as e:
-            print(f"Ошибка отправки: {e}", file=sys.stderr)
+            logger.warning("Ошибка отправки: %s", e)
         delete_reminder(client, rem_id)
 
 
 async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /list — показывает все активные напоминалки."""
     chat_id = update.message.chat_id
     client = context.bot_data.get("db_client")
     reminders = get_reminders_by_chat(client, chat_id)
@@ -67,7 +66,6 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "📋 Твои напоминалки:\n\n"
     for text, dt in reminders:
         if isinstance(dt, str):
-            # Supabase возвращает ISO-формат: "2026-06-09T10:00:00+00:00"
             dt = dt.replace("T", " ").split("+")[0].split(".")[0]
             dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S")
         formatted = dt.strftime("%d.%m в %H:%M")

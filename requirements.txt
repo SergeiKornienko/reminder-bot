@@ -5,3 +5,4 @@ pytest==9.0.3
 pytest-asyncio>=0.24
 pytest-httpx>=0.35
 httpx==0.28.1
+waitress==3.0.2
