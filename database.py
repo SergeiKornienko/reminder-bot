@@ -56,15 +56,8 @@ def delete_reminder(client, reminder_id: int):
 
 def get_reminders_by_chat(client, chat_id: int):
     """Возвращает все напоминалки для конкретного чата."""
-    response = httpx.get(
-        _url("reminders"),
-        headers=HEADERS,
-        params={
-            "select": "remind_text,remind_time",
-            "chat_id": f"eq.{chat_id}",
-            "order": "remind_time.asc"
-        }
-    )
+    url = f"{_url('reminders')}?select=remind_text,remind_time&chat_id=eq.{chat_id}&order=remind_time.asc"
+    response = httpx.get(url, headers=HEADERS)
     response.raise_for_status()
     data = response.json()
     return [(r["remind_text"], r["remind_time"]) for r in data]
