@@ -1,56 +1,70 @@
-import sqlite3
-from datetime import datetime
+import os
+from datetime import datetime, timezone
+import httpx
 
-DB_PATH = 'reminders.db'
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-def get_connection():
-    """Создаёт подключение к базе (по одному на вызов — для тестов)."""
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    return conn
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
 
-def init_db(conn):
-    """Создаёт таблицу, если её нет."""
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS reminders
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                       chat_id INTEGER NOT NULL,
-                       remind_text TEXT NOT NULL,
-                       remind_time TIMESTAMP NOT NULL)''')
-    conn.commit()
+def _url(table: str) -> str:
+    return f"{SUPABASE_URL}/rest/v1/{table}"
 
-def add_reminder(conn, chat_id: int, remind_text: str, remind_time: datetime):
+def add_reminder(client, chat_id: int, remind_text: str, remind_time: datetime):
     """Добавляет напоминалку. Возвращает id новой записи."""
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO reminders (chat_id, remind_text, remind_time) VALUES (?, ?, ?)",
-        (chat_id, remind_text, remind_time)
+    data = {
+        "chat_id": chat_id,
+        "remind_text": remind_text,
+        "remind_time": remind_time.isoformat()
+    }
+    response = httpx.post(
+        _url("reminders"),
+        headers=HEADERS,
+        json=data
     )
-    conn.commit()
-    return cursor.lastrowid
+    response.raise_for_status()
+    return response.json()[0]["id"]
 
-def get_due_reminders(conn):
-    """Возвращает список напоминалок, которые пора отправить.
-       Каждая запись — кортеж (id, chat_id, remind_text)."""
-    now = datetime.now()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, chat_id, remind_text FROM reminders WHERE remind_time <= ?",
-        (now,)
+def get_due_reminders(client):
+    """Возвращает список напоминалок, которые пора отправить."""
+    now = datetime.now(timezone.utc).isoformat()
+    response = httpx.get(
+        _url("reminders"),
+        headers=HEADERS,
+        params={
+            "select": "id,chat_id,remind_text",
+            "remind_time": f"lte.{now}",
+            "order": "remind_time.asc"
+        }
     )
-    return cursor.fetchall()
+    response.raise_for_status()
+    data = response.json()
+    return [(r["id"], r["chat_id"], r["remind_text"]) for r in data]
 
-def delete_reminder(conn, reminder_id: int):
+def delete_reminder(client, reminder_id: int):
     """Удаляет напоминалку по id."""
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
-    conn.commit()
-
-def get_reminders_by_chat(conn, chat_id: int):
-    """Возвращает все напоминалки для конкретного чата.
-       Каждая запись — кортеж (remind_text, remind_time)."""
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT remind_text, remind_time FROM reminders WHERE chat_id = ? ORDER BY remind_time",
-        (chat_id,)
+    response = httpx.delete(
+        f"{_url('reminders')}?id=eq.{reminder_id}",
+        headers=HEADERS
     )
-    return cursor.fetchall()
+    response.raise_for_status()
+
+def get_reminders_by_chat(client, chat_id: int):
+    """Возвращает все напоминалки для конкретного чата."""
+    response = httpx.get(
+        _url("reminders"),
+        headers=HEADERS,
+        params={
+            "select": "remind_text,remind_time",
+            "chat_id": f"eq.{chat_id}",
+            "order": "remind_time.asc"
+        }
+    )
+    response.raise_for_status()
+    data = response.json()
+    return [(r["remind_text"], r["remind_time"]) for r in data]

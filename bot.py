@@ -4,7 +4,7 @@ import threading
 import asyncio
 from flask import Flask
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from database import get_connection, init_db
+import database
 from handlers import handle_message, check_reminders, list_reminders
 
 # --- Конфигурация ---
@@ -31,10 +31,6 @@ def run_flask():
 if __name__ == '__main__':
     check_token()
 
-    # База данных
-    conn = get_connection()
-    init_db(conn)
-
     # Flask в отдельном потоке
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
@@ -45,12 +41,12 @@ if __name__ == '__main__':
 
     # Бот
     app = Application.builder().token(TOKEN).build()
-    app.bot_data["db_conn"] = conn  # Передаём соединение в обработчики
+    app.bot_data["db_client"] = None  # Совместимость с handlers
 
     app.add_handler(CommandHandler("list", list_reminders))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     job_queue = app.job_queue
     job_queue.run_repeating(check_reminders, interval=60, first=10)
 
-    print("Бот + Flask на Render. Погнали!", file=sys.stderr, flush=True)
+    print("Бот + Flask + Supabase на Render. Погнали!", file=sys.stderr, flush=True)
     app.run_polling(stop_signals=[])

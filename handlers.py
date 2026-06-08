@@ -33,16 +33,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    conn = context.bot_data.get("db_conn")
-    add_reminder(conn, chat_id, remind_text, remind_dt)
+    client = context.bot_data.get("db_client")
+    add_reminder(client, chat_id, remind_text, remind_dt)
     formatted_time = remind_dt.strftime("%d.%m.%Y в %H:%M")
     await update.message.reply_text(f"✅ Запомнил! Напомню {formatted_time}:\n«{remind_text}»")
 
 
 async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
     """Фоновая проверка: отправляет просроченные напоминалки."""
-    conn = context.bot_data.get("db_conn")
-    due_reminders = get_due_reminders(conn)
+    client = context.bot_data.get("db_client")
+    due_reminders = get_due_reminders(client)
     for rem_id, chat_id, text in due_reminders:
         try:
             await context.bot.send_message(
@@ -51,14 +51,14 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             print(f"Ошибка отправки: {e}", file=sys.stderr)
-        delete_reminder(conn, rem_id)
+        delete_reminder(client, rem_id)
 
 
 async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /list — показывает все активные напоминалки."""
     chat_id = update.message.chat_id
-    conn = context.bot_data.get("db_conn")
-    reminders = get_reminders_by_chat(conn, chat_id)
+    client = context.bot_data.get("db_client")
+    reminders = get_reminders_by_chat(client, chat_id)
 
     if not reminders:
         await update.message.reply_text("У тебя нет активных напоминалок.")
