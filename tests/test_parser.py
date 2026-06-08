@@ -1,6 +1,3 @@
-import sys
-sys.path.insert(0, '/data/data/com.termux/files/home/health')
-
 from parser import parse_reminder
 from datetime import datetime, timedelta
 
