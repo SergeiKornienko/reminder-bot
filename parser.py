@@ -1,16 +1,13 @@
 import re
-import sys
+import os
 from datetime import datetime, timedelta
+import pytz
 import dateparser
+
+TZ = pytz.timezone(os.environ.get("TZ", "Europe/Moscow"))
 
 
 def parse_reminder(text: str):
-    """
-    Пытается извлечь дату и текст напоминалки из сообщения.
-    Возвращает:
-      (datetime, remind_text) — если успешно
-      (None, payload)         — если не удалось распарсить
-    """
     payload = text.strip()
     remind_dt = None
     remind_text = payload
@@ -25,7 +22,7 @@ def parse_reminder(text: str):
         hour = int(day_match.group(2))
         minute = int(day_match.group(3))
         remind_text = day_match.group(4) if day_match.group(4) else payload
-        now = datetime.now().replace(second=0, microsecond=0)
+        now = datetime.now(TZ).replace(second=0, microsecond=0)
         if day_word == "сегодня":
             remind_dt = now.replace(hour=hour, minute=minute)
         elif day_word == "завтра":
@@ -42,12 +39,12 @@ def parse_reminder(text: str):
         if date_match:
             day = int(date_match.group(1))
             month = int(date_match.group(2))
-            year = int(date_match.group(3)) if date_match.group(3) else datetime.now().year
+            year = int(date_match.group(3)) if date_match.group(3) else datetime.now(TZ).year
             hour = int(date_match.group(4))
             minute = int(date_match.group(5))
             remind_text = date_match.group(6) if date_match.group(6) else payload
             try:
-                remind_dt = datetime(year, month, day, hour, minute)
+                remind_dt = TZ.localize(datetime(year, month, day, hour, minute))
             except ValueError:
                 pass
 
@@ -61,7 +58,7 @@ def parse_reminder(text: str):
             amount = int(relative_match.group(1))
             unit = relative_match.group(2).lower()
             remind_text = relative_match.group(3) if relative_match.group(3) else payload
-            now = datetime.now()
+            now = datetime.now(TZ)
             if "час" in unit:
                 remind_dt = now + timedelta(hours=amount)
             elif "минут" in unit:
@@ -69,7 +66,12 @@ def parse_reminder(text: str):
 
     # Запасной: dateparser
     if remind_dt is None:
-        remind_dt = dateparser.parse(payload, languages=['ru'])
+        parsed = dateparser.parse(payload, languages=['ru'])
+        if parsed:
+            if parsed.tzinfo is None:
+                remind_dt = TZ.localize(parsed)
+            else:
+                remind_dt = parsed.astimezone(TZ)
 
     if remind_dt is None:
         return (None, payload)

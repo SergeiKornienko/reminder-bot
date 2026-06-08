@@ -1,12 +1,19 @@
-from parser import parse_reminder
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime, timedelta
+import pytz
+from parser import parse_reminder
+
+TZ = pytz.timezone("Europe/Moscow")
 
 
 def test_parse_tomorrow_morning():
     dt, text = parse_reminder("завтра в 10:00 купить хлеб")
     assert dt is not None
     assert text == "купить хлеб"
-    expected = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    expected = (datetime.now(TZ) + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
     assert dt == expected
 
 
@@ -14,7 +21,7 @@ def test_parse_today():
     dt, text = parse_reminder("сегодня в 15:30 позвонить врачу")
     assert dt is not None
     assert text == "позвонить врачу"
-    expected = datetime.now().replace(hour=15, minute=30, second=0, microsecond=0)
+    expected = datetime.now(TZ).replace(hour=15, minute=30, second=0, microsecond=0)
     assert dt == expected
 
 
