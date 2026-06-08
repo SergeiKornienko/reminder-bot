@@ -1,15 +1,12 @@
-name: Run Tests
+name: Test & Deploy
 
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,3 +30,11 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: pytest tests/ -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Trigger Render Deploy
+        run: curl -s "${{ secrets.RENDER_DEPLOY_HOOK }}"
