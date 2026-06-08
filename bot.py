@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import time
 import asyncio
 from flask import Flask
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
@@ -49,4 +50,6 @@ if __name__ == '__main__':
     job_queue.run_repeating(check_reminders, interval=60, first=10)
 
     print("Бот + Flask + Supabase на Render. Погнали!", file=sys.stderr, flush=True)
+    
+    time.sleep(15)
     app.run_polling(stop_signals=[])
